@@ -99,10 +99,10 @@
             flex-grow: 1;
         }
         .room-item {
-            padding: 15px;
+            padding: 15px 20px;
             border-bottom: 1px solid #dee2e6;
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: all 0.2s ease;
         }
         .room-item:hover {
             background-color: #f8f9fa;
@@ -113,10 +113,49 @@
         .room-name {
             font-weight: 500;
             margin-bottom: 4px;
+            display: flex;
+            align-items: center;
         }
         .room-type {
             font-size: 0.8em;
             color: #6c757d;
+        }
+        .list-group-item {
+            transition: all 0.2s ease;
+            border-left: none;
+            border-right: none;
+        }
+        .list-group-item:first-child {
+            border-top: none;
+        }
+        .list-group-item:last-child {
+            border-bottom: none;
+        }
+        .list-group-item:hover {
+            background-color: #f8f9fa;
+        }
+        .alert {
+            margin-bottom: 0;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .input-group .btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.375rem 0.75rem;
+        }
+        .input-group .btn i {
+            font-size: 0.875rem;
         }
         .message-input-container {
             padding: 20px;
@@ -154,6 +193,8 @@
             padding: 20px;
             border-bottom: 1px solid #dee2e6;
             background-color: white;
+            overflow-y: auto;
+            max-height: 50vh;
         }
         .chat-header {
             padding: 20px;
@@ -194,6 +235,7 @@
             const [currentRoomId, setCurrentRoomId] = React.useState(null);
             const [socket, setSocket] = React.useState(null);
             const [actionResult, setActionResult] = React.useState('');
+            const [searchedUsers, setSearchedUsers] = React.useState([]);
             const messageContainerRef = React.useRef(null);
 
             const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
@@ -225,12 +267,20 @@
             };
 
             const searchUsers = async () => {
+                if (searchQuery.length < 3) {
+                    setSearchedUsers([]);
+                    setActionResult('검색어는 3자 이상 입력해주세요.');
+                    return;
+                }
+
                 try {
                     const response = await fetch(`/api/users/search/?q=${searchQuery}`);
                     const data = await response.json();
-                    setSearchResult(JSON.stringify(data, null, 2));
+                    setSearchedUsers(data);
+                    setActionResult('');
                 } catch (err) {
-                    setSearchResult('에러: ' + err.message);
+                    setActionResult('에러: ' + err.message);
+                    setSearchedUsers([]);
                 }
             };
 
@@ -247,6 +297,31 @@
                     const data = await response.json();
                     setActionResult(JSON.stringify(data, null, 2));
                     getRooms();
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                }
+            };
+
+            const createDirectChat = async (userId) => {
+                try {
+                    const response = await fetch('/api/rooms/create_direct_chat/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({ user_id: userId })
+                    });
+                    const data = await response.json();
+                    
+                    if (response.ok) {
+                        setActionResult('1:1 대화방이 생성되었습니다.');
+                        getRooms();
+                        setSearchedUsers([]);
+                        setSearchQuery('');
+                    } else {
+                        setActionResult('에러: ' + data.error);
+                    }
                 } catch (err) {
                     setActionResult('에러: ' + err.message);
                 }
@@ -360,36 +435,89 @@
                 <div className="chat-container">
                     <div className="sidebar">
                         <div className="sidebar-header">
-                            <div className="d-flex justify-content-between align-items-center">
-                                <h5 className="mb-0">채팅</h5>
-                                <button 
-                                    className="new-chat-button"
-                                    onClick={() => {
-                                        const name = prompt('채팅방 이름을 입력하세요:');
-                                        if (name) {
-                                            setRoomName(name);
-                                            createRoom();
-                                        }
-                                    }}
-                                >
-                                    <i className="fas fa-plus"></i> 새 채팅
-                                </button>
+                            <h4 className="mb-3">채팅</h4>
+                            
+                            {/* 사용자 검색 섹션 */}
+                            <div className="mb-3">
+                                <div className="input-group">
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="사용자 검색 (3자 이상)"
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && searchUsers()}
+                                    />
+                                    <button className="btn btn-outline-primary" onClick={searchUsers}>
+                                        <i className="fas fa-search"></i>
+                                    </button>
+                                </div>
                             </div>
+
+                            {/* 검색 결과 표시 */}
+                            {searchedUsers.length > 0 && (
+                                <div className="list-group mb-3">
+                                    {searchedUsers.map(user => (
+                                        <button
+                                            key={user.id}
+                                            className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                            onClick={() => createDirectChat(user.id)}
+                                        >
+                                            <div>
+                                                <div>{user.username}</div>
+                                                <small className="text-muted">{user.email}</small>
+                                            </div>
+                                            <i className="fas fa-comment-dots text-primary"></i>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* 새 그룹 채팅방 생성 */}
+                            <div className="mb-3">
+                                <div className="input-group">
+                                    <input
+                                        type="text"
+                                        className="form-control"
+                                        placeholder="새 그룹 채팅방 이름"
+                                        value={roomName}
+                                        onChange={(e) => setRoomName(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && createRoom()}
+                                    />
+                                    <button 
+                                        className="btn btn-success" 
+                                        onClick={createRoom}
+                                        disabled={!roomName.trim()}
+                                    >
+                                        <i className="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 알림 메시지 */}
+                            {actionResult && (
+                                <div className="alert alert-info py-2 small">{actionResult}</div>
+                            )}
                         </div>
-                        <div className="room-list">
-                            {rooms.results && rooms.results.map((room) => (
-                                <div
+
+                        {/* 채팅방 목록 */}
+                        <ul className="room-list">
+                            {rooms.results.map(room => (
+                                <li
                                     key={room.id}
                                     className={`room-item ${currentRoomId === room.id ? 'active' : ''}`}
                                     onClick={() => joinRoom(room.id)}
                                 >
-                                    <div className="room-name">{room.name}</div>
-                                    <div className="room-type">
-                                        {room.room_type === 'group' ? '그룹 채팅' : '1:1 채팅'}
+                                    <div className="room-name">
+                                        <i className={`fas fa-${room.room_type === 'direct' ? 'user' : 'users'} me-2`}></i>
+                                        {room.name}
                                     </div>
-                                </div>
+                                    <div className="room-type text-muted small">
+                                        {room.room_type === 'direct' ? '1:1 대화' : '그룹 채팅'}
+                                    </div>
+                                </li>
                             ))}
-                        </div>
+                        </ul>
                     </div>
                     <div className="main-content">
                         {currentRoomId ? (

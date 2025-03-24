@@ -27,6 +27,48 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
         chat_room = serializer.save()
         ChatRoomMember.objects.create(room=chat_room, user=self.request.user)
 
+    @action(detail=False, methods=["post"])
+    def create_direct_chat(self, request):
+        target_user_id = request.data.get("user_id")
+        if not target_user_id:
+            return Response(
+                {"error": "대화 상대를 지정해주세요."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            target_user = User.objects.get(id=target_user_id)
+        except User.DoesNotExist:
+            return Response(
+                {"error": "존재하지 않는 사용자입니다."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # 이미 존재하는 1:1 대화방 확인
+        existing_room = (
+            ChatRoom.objects.filter(
+                room_type="direct",
+                participants__user=request.user,
+            )
+            .filter(participants__user=target_user)
+            .first()
+        )
+
+        if existing_room:
+            serializer = self.get_serializer(existing_room)
+            return Response(serializer.data)
+
+        # 새로운 1:1 대화방 생성
+        room_name = f"DM: {request.user.username} & {target_user.username}"
+        chat_room = ChatRoom.objects.create(name=room_name, room_type="direct")
+
+        # 참여자 추가
+        ChatRoomMember.objects.create(room=chat_room, user=request.user)
+        ChatRoomMember.objects.create(room=chat_room, user=target_user)
+
+        serializer = self.get_serializer(chat_room)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=["post"])
     def join(self, request, pk=None):
         chat_room = self.get_object()
