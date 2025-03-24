@@ -54,6 +54,7 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
+    ordering = ["-created_at"]
 
     def get_queryset(self):
         room_id = self.kwargs.get("room_pk")

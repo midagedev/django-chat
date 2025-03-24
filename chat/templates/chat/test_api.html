@@ -210,10 +210,10 @@
 
             const getRecentMessages = async (roomId) => {
                 try {
-                    const response = await fetch(`/api/rooms/${roomId}/messages/?limit=10`);
+                    const response = await fetch(`/api/rooms/${roomId}/messages/`);
                     const data = await response.json();
                     // 최근 메시지를 시간순으로 정렬하여 설정
-                    setMessages(data.results.reverse().map(msg => ({
+                    setMessages(data.results.map(msg => ({
                         type: 'message',
                         user: msg.sender.username,
                         message: msg.content,
