@@ -14,7 +14,6 @@ from .serializers import (
 
 class ChatRoomViewSet(viewsets.ModelViewSet):
     serializer_class = ChatRoomSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         return ChatRoom.objects.filter(participants__user=self.request.user).distinct()
@@ -50,7 +49,6 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
 
 class MessageViewSet(viewsets.ModelViewSet):
     serializer_class = MessageSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         room_id = self.kwargs.get("room_pk")
@@ -64,7 +62,6 @@ class MessageViewSet(viewsets.ModelViewSet):
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     @action(detail=False, methods=["get"])
     def me(self, request):
