@@ -13,6 +13,8 @@ dependencies = [
     "channels-redis>=4.2.0",
     "django-environ>=0.11.2",
     "djangorestframework>=3.15.2",
+    "daphne>=4.1.0",
+    "drf-nested-routers>=0.93.5",
 ]
 requires-python = ">=3.11"
 

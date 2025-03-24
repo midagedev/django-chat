@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>채팅 API 테스트</title>
+    <meta charset="utf-8">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body { max-width: 800px; margin: 0 auto; padding: 20px; }
+        .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; }
+        .result { margin-top: 10px; padding: 10px; background: #f5f5f5; }
+        button { margin: 5px; }
+        .room-actions { margin-top: 10px; }
+    </style>
+</head>
+<body>
+    {% csrf_token %}
+    <h1>채팅 API 테스트</h1>
+
+    <div class="section">
+        <h2>현재 사용자 정보</h2>
+        <div class="result">
+            {% if user.is_authenticated %}
+                사용자: {{ user.username }} (ID: {{ user.id }})
+            {% else %}
+                로그인되어 있지 않습니다.
+            {% endif %}
+        </div>
+    </div>
+
+
+    <div class="section">
+        <h2>사용자 검색</h2>
+        <input type="text" id="searchQuery" placeholder="검색어 입력 (3자 이상)">
+        <button onclick="searchUsers()">검색</button>
+        <div id="searchResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>채팅방 생성</h2>
+        <input type="text" id="roomName" placeholder="채팅방 이름">
+        <select id="roomType">
+            <option value="group">그룹</option>
+            <option value="direct">1:1</option>
+        </select>
+        <button onclick="createRoom()">생성</button>
+        <div id="createRoomResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>채팅방 목록</h2>
+        <button onclick="getRooms()">새로고침</button>
+        <div id="roomListContainer">
+            <div id="roomList" class="result"></div>
+            <div class="room-actions">
+                <input type="text" id="joinRoomId" placeholder="참여할 방 ID">
+                <button onclick="joinRoom()">방 참여하기</button>
+                <button onclick="leaveRoom()">방 나가기</button>
+                <div id="roomActionResult" class="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>메시지 보내기</h2>
+        <select id="roomSelect"></select>
+        <input type="text" id="messageText" placeholder="메시지 입력">
+        <button onclick="sendMessage()">전송</button>
+        <div id="messageResult" class="result"></div>
+    </div>
+
+    <div class="section">
+        <h2>실시간 메시지</h2>
+        <div id="messageContainer" class="result" style="max-height: 300px; overflow-y: auto;">
+        </div>
+    </div>
+
+    <script>
+        // CSRF 토큰 설정
+        const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        
+        $.ajaxSetup({
+            beforeSend: function(xhr, settings) {
+                if (!this.crossDomain) {
+                    xhr.setRequestHeader("X-CSRFToken", csrftoken);
+                }
+            }
+        });
+
+        function searchUsers() {
+            const query = $('#searchQuery').val();
+            $.get(`/api/users/search/?q=${query}`)
+                .done(data => {
+                    $('#searchResult').html(JSON.stringify(data, null, 2));
+                })
+                .fail(err => {
+                    $('#searchResult').html('에러: ' + err.responseJSON.error);
+                });
+        }
+
+        function createRoom() {
+            const name = $('#roomName').val();
+            const room_type = $('#roomType').val();
+            $.post('/api/rooms/', { name, room_type })
+                .done(data => {
+                    $('#createRoomResult').html(JSON.stringify(data, null, 2));
+                    getRooms();
+                })
+                .fail(err => {
+                    $('#createRoomResult').html('에러: ' + err.responseJSON.error);
+                });
+        }
+
+        function getRooms() {
+            $.get('/api/rooms/')
+                .done(data => {
+                    $('#roomList').html(JSON.stringify(data, null, 2));
+                    updateRoomSelect(data);
+                })
+                .fail(err => {
+                    $('#roomList').html('에러: ' + err.responseJSON.error);
+                });
+        }
+
+        let socket = null;
+        let currentRoomId = null;
+
+        function connectWebSocket(roomId) {
+            if (socket) {
+                socket.close();
+            }
+
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/chat/${roomId}/`;
+            
+            socket = new WebSocket(wsUrl);
+            currentRoomId = roomId;
+
+            socket.onmessage = function(e) {
+                const messageDiv = document.createElement('div');
+                const data = JSON.parse(e.data);
+                if (data.type === 'message') {
+                    messageDiv.innerHTML = `<strong>${data.user}:</strong> ${data.message}`;
+                } else if (data.type === 'join') {
+                    messageDiv.innerHTML = `<em>${data.user}님이 입장하셨습니다.</em>`;
+                } else if (data.type === 'leave') {
+                    messageDiv.innerHTML = `<em>${data.user}님이 퇴장하셨습니다.</em>`;
+                }
+                const container = document.getElementById('messageContainer');
+                container.appendChild(messageDiv);
+                container.scrollTop = container.scrollHeight;
+            };
+
+            socket.onclose = function(e) {
+                console.log('WebSocket 연결이 종료되었습니다.');
+                currentRoomId = null;
+            };
+        }
+
+        function joinRoom() {
+            const roomId = $('#joinRoomId').val();
+            if (!roomId) {
+                $('#roomActionResult').html('에러: 방 ID를 입력해주세요.');
+                return;
+            }
+            $.post(`/api/rooms/${roomId}/join/`)
+                .done(() => {
+                    $('#roomActionResult').html('방에 성공적으로 참여했습니다.');
+                    getRooms();
+                    connectWebSocket(roomId);
+                })
+                .fail(err => {
+                    $('#roomActionResult').html('에러: ' + err.responseJSON.error);
+                });
+        }
+
+        function leaveRoom() {
+            const roomId = $('#joinRoomId').val();
+            if (!roomId) {
+                $('#roomActionResult').html('에러: 방 ID를 입력해주세요.');
+                return;
+            }
+            if (socket) {
+                socket.close();
+                socket = null;
+            }
+            $.post(`/api/rooms/${roomId}/leave/`)
+                .done(() => {
+                    $('#roomActionResult').html('방에서 성공적으로 나갔습니다.');
+                    getRooms();
+                    document.getElementById('messageContainer').innerHTML = '';
+                })
+                .fail(err => {
+                    $('#roomActionResult').html('에러: ' + err.responseJSON.error);
+                });
+        }
+
+        function updateRoomSelect(rooms) {
+            const select = $('#roomSelect');
+            select.empty();
+            rooms.results.forEach(room => {
+                select.append(new Option(room.name, room.id));
+            });
+        }
+
+        function sendMessage() {
+            const roomId = $('#roomSelect').val();
+            const content = $('#messageText').val();
+            
+            if (roomId !== currentRoomId) {
+                $('#messageResult').html('에러: 먼저 채팅방에 참여해주세요.');
+                return;
+            }
+
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                $('#messageResult').html('에러: WebSocket 연결이 없습니다.');
+                return;
+            }
+
+            socket.send(JSON.stringify({
+                message: content
+            }));
+            
+            $('#messageText').val('');
+            $('#messageResult').html('');
+        }
+
+        // 초기 채팅방 목록 로드
+        getRooms();
+    </script>
+</body>
+</html> 

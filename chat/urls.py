@@ -20,15 +20,16 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers
 from . import views
 
-router = DefaultRouter()
+router = routers.DefaultRouter()
 router.register(r"rooms", views.ChatRoomViewSet, basename="room")
 router.register(r"users", views.UserViewSet, basename="user")
 
-rooms_router = routers.NestedSimpleRouter(router, r"rooms", lookup="room")
+rooms_router = routers.NestedDefaultRouter(router, r"rooms", lookup="room")
 rooms_router.register(r"messages", views.MessageViewSet, basename="room-messages")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include(router.urls)),
-    path("", include(rooms_router.urls)),
+    path("test/", views.test_api_view, name="test_api"),
+    path("api/", include(router.urls)),
+    path("api/", include(rooms_router.urls)),
 ]

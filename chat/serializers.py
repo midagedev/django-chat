@@ -18,7 +18,7 @@ class ChatRoomMemberSerializer(serializers.ModelSerializer):
 
 
 class MessageSerializer(serializers.ModelSerializer):
-    sender = UserSerializer()
+    sender = UserSerializer(required=False)
 
     class Meta:
         model = Message

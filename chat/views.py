@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.db.models import Q
 from django.contrib.auth.models import User
+from django.shortcuts import render
 from .models import ChatRoom, ChatRoomMember, Message
 from .serializers import (
     ChatRoomSerializer,
@@ -12,11 +13,15 @@ from .serializers import (
 )
 
 
+def test_api_view(request):
+    return render(request, "chat/test_api.html")
+
+
 class ChatRoomViewSet(viewsets.ModelViewSet):
     serializer_class = ChatRoomSerializer
 
     def get_queryset(self):
-        return ChatRoom.objects.filter(participants__user=self.request.user).distinct()
+        return ChatRoom.objects.all()
 
     def perform_create(self, serializer):
         chat_room = serializer.save()
@@ -57,7 +62,6 @@ class MessageViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         room_id = self.kwargs.get("room_pk")
         serializer.save(room_id=room_id, sender=self.request.user)
-
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all()

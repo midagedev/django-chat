@@ -1,7 +1,7 @@
 services:
   web:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    command: daphne -b 0.0.0.0 -p 8000 chat.asgi:application
     volumes:
       - .:/app
     ports:
@@ -9,6 +9,7 @@ services:
     environment:
       - DATABASE_URL=postgres://django_chat:django_chat_password@db:5432/django_chat
       - REDIS_URL=redis://redis:6379/0
+      - DJANGO_SETTINGS_MODULE=chat.settings
     depends_on:
       db:
         condition: service_healthy
