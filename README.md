@@ -37,7 +37,3 @@ docker compose up
 ```
 
 테스트는 http://localhost:8000/test 에서 가능합니다.
-
-## 라이선스
-
-이 프로젝트는 MIT 라이선스를 따릅니다.
