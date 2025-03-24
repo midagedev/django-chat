@@ -1,14 +1,16 @@
 [project]
 name = "django-chat"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
+description = "Real-time chat system using Django and Channels"
+authors = []
 dependencies = [
-    "channels>=4.2.0",
-    "django>=5.1.7",
+    "django>=5.0.0",
+    "channels>=4.0.0",
+    "channels-redis>=4.1.0",
+    "djangorestframework>=3.14.0",
+    "psycopg2-binary>=2.9.9",
     "django-redis>=5.4.0",
-    "ruff>=0.11.2",
+    "daphne>=4.0.0",
 ]
 
 [dependency-groups]

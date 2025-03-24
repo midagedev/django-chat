@@ -15,8 +15,20 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from rest_framework_nested import routers
+from . import views
+
+router = DefaultRouter()
+router.register(r"rooms", views.ChatRoomViewSet, basename="room")
+router.register(r"users", views.UserViewSet, basename="user")
+
+rooms_router = routers.NestedSimpleRouter(router, r"rooms", lookup="room")
+rooms_router.register(r"messages", views.MessageViewSet, basename="room-messages")
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
+    path("admin/", admin.site.urls),
+    path("", include(router.urls)),
+    path("", include(rooms_router.urls)),
 ]
