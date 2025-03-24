@@ -36,20 +36,7 @@ uv pip install --no-cache -r pyproject.toml
 docker compose up
 ```
 
-서버는 http://localhost:8000 에서 실행됩니다.
-
-## 환경 변수
-
-프로젝트 실행을 위해 다음 환경 변수가 필요합니다:
-
-- `DATABASE_URL`: PostgreSQL 데이터베이스 연결 문자열
-- `REDIS_URL`: Redis 서버 연결 문자열
-- `DJANGO_SETTINGS_MODULE`: Django 설정 모듈 경로
-
-## 개발 도구
-
-- Ruff: 코드 린팅 및 포맷팅
-- Pytest: 테스트 실행
+테스트는 http://localhost:8000/test 에서 가능합니다.
 
 ## 라이선스
 
