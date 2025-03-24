@@ -1,231 +1,470 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>채팅 API 테스트</title>
+    <title>채팅</title>
     <meta charset="utf-8">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <!-- React CDN -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Updated Babel with preset -->
+    <script src="https://unpkg.com/@babel/standalone@7.22.17/babel.min.js"></script>
+    <script>
+        Babel.registerPreset("custom", {
+            presets: [
+                [Babel.availablePresets["env"], { targets: { chrome: "58" } }],
+                Babel.availablePresets["react"]
+            ]
+        });
+    </script>
+    <!-- Bootstrap CDN -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        body { max-width: 800px; margin: 0 auto; padding: 20px; }
-        .section { margin-bottom: 30px; border: 1px solid #ddd; padding: 20px; }
-        .result { margin-top: 10px; padding: 10px; background: #f5f5f5; }
-        button { margin: 5px; }
-        .room-actions { margin-top: 10px; }
+        body {
+            height: 100vh;
+            margin: 0;
+            background-color: #f8f9fa;
+        }
+        .chat-container {
+            height: 100vh;
+            display: flex;
+            padding: 0;
+            margin: 0;
+            max-width: 100%;
+        }
+        .sidebar {
+            width: 300px;
+            background-color: white;
+            border-right: 1px solid #dee2e6;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .main-content {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background-color: white;
+        }
+        .message-container {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+        .message {
+            margin-bottom: 15px;
+            max-width: 80%;
+        }
+        .message.sent {
+            margin-left: auto;
+        }
+        .message.received {
+            margin-right: auto;
+        }
+        .message-bubble {
+            padding: 10px 15px;
+            border-radius: 15px;
+            position: relative;
+            word-wrap: break-word;
+        }
+        .message.sent .message-bubble {
+            background-color: #0d6efd;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+        .message.received .message-bubble {
+            background-color: #e9ecef;
+            color: black;
+            border-bottom-left-radius: 5px;
+        }
+        .message-header {
+            font-size: 0.8em;
+            margin-bottom: 4px;
+            color: #6c757d;
+        }
+        .message-timestamp {
+            font-size: 0.75em;
+            margin-top: 4px;
+            color: #6c757d;
+        }
+        .room-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            overflow-y: auto;
+            flex-grow: 1;
+        }
+        .room-item {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .room-item:hover {
+            background-color: #f8f9fa;
+        }
+        .room-item.active {
+            background-color: #e9ecef;
+        }
+        .room-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+        .room-type {
+            font-size: 0.8em;
+            color: #6c757d;
+        }
+        .message-input-container {
+            padding: 20px;
+            background-color: white;
+            border-top: 1px solid #dee2e6;
+        }
+        .message-input-wrapper {
+            display: flex;
+            gap: 10px;
+        }
+        .message-input {
+            flex-grow: 1;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            padding: 8px 15px;
+            outline: none;
+        }
+        .send-button {
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .send-button:hover {
+            background-color: #0b5ed7;
+        }
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            background-color: white;
+        }
+        .chat-header {
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+            background-color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .new-chat-button {
+            background-color: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 15px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .new-chat-button:hover {
+            background-color: #0b5ed7;
+        }
     </style>
 </head>
 <body>
     {% csrf_token %}
-    <h1>채팅 API 테스트</h1>
+    <div id="root"></div>
 
-    <div class="section">
-        <h2>현재 사용자 정보</h2>
-        <div class="result">
-            {% if user.is_authenticated %}
-                사용자: {{ user.username }} (ID: {{ user.id }})
-            {% else %}
-                로그인되어 있지 않습니다.
-            {% endif %}
-        </div>
-    </div>
+    <script type="text/babel" data-presets="custom">
+        function ChatApp() {
+            const [searchQuery, setSearchQuery] = React.useState('');
+            const [searchResult, setSearchResult] = React.useState('');
+            const [roomName, setRoomName] = React.useState('');
+            const [roomType, setRoomType] = React.useState('group');
+            const [joinRoomId, setJoinRoomId] = React.useState('');
+            const [rooms, setRooms] = React.useState({ results: [] });
+            const [messageText, setMessageText] = React.useState('');
+            const [messages, setMessages] = React.useState([]);
+            const [currentRoomId, setCurrentRoomId] = React.useState(null);
+            const [socket, setSocket] = React.useState(null);
+            const [actionResult, setActionResult] = React.useState('');
+            const messageContainerRef = React.useRef(null);
 
+            const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-    <div class="section">
-        <h2>사용자 검색</h2>
-        <input type="text" id="searchQuery" placeholder="검색어 입력 (3자 이상)">
-        <button onclick="searchUsers()">검색</button>
-        <div id="searchResult" class="result"></div>
-    </div>
+            React.useEffect(() => {
+                getRooms();
+            }, []);
 
-    <div class="section">
-        <h2>채팅방 생성</h2>
-        <input type="text" id="roomName" placeholder="채팅방 이름">
-        <select id="roomType">
-            <option value="group">그룹</option>
-            <option value="direct">1:1</option>
-        </select>
-        <button onclick="createRoom()">생성</button>
-        <div id="createRoomResult" class="result"></div>
-    </div>
-
-    <div class="section">
-        <h2>채팅방 목록</h2>
-        <button onclick="getRooms()">새로고침</button>
-        <div id="roomListContainer">
-            <div id="roomList" class="result"></div>
-            <div class="room-actions">
-                <input type="text" id="joinRoomId" placeholder="참여할 방 ID">
-                <button onclick="joinRoom()">방 참여하기</button>
-                <button onclick="leaveRoom()">방 나가기</button>
-                <div id="roomActionResult" class="result"></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="section">
-        <h2>메시지 보내기</h2>
-        <select id="roomSelect"></select>
-        <input type="text" id="messageText" placeholder="메시지 입력">
-        <button onclick="sendMessage()">전송</button>
-        <div id="messageResult" class="result"></div>
-    </div>
-
-    <div class="section">
-        <h2>실시간 메시지</h2>
-        <div id="messageContainer" class="result" style="max-height: 300px; overflow-y: auto;">
-        </div>
-    </div>
-
-    <script>
-        // CSRF 토큰 설정
-        const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-        
-        $.ajaxSetup({
-            beforeSend: function(xhr, settings) {
-                if (!this.crossDomain) {
-                    xhr.setRequestHeader("X-CSRFToken", csrftoken);
+            React.useEffect(() => {
+                if (messageContainerRef.current) {
+                    messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
                 }
-            }
-        });
+            }, [messages]);
 
-        function searchUsers() {
-            const query = $('#searchQuery').val();
-            $.get(`/api/users/search/?q=${query}`)
-                .done(data => {
-                    $('#searchResult').html(JSON.stringify(data, null, 2));
-                })
-                .fail(err => {
-                    $('#searchResult').html('에러: ' + err.responseJSON.error);
-                });
-        }
-
-        function createRoom() {
-            const name = $('#roomName').val();
-            const room_type = $('#roomType').val();
-            $.post('/api/rooms/', { name, room_type })
-                .done(data => {
-                    $('#createRoomResult').html(JSON.stringify(data, null, 2));
-                    getRooms();
-                })
-                .fail(err => {
-                    $('#createRoomResult').html('에러: ' + err.responseJSON.error);
-                });
-        }
-
-        function getRooms() {
-            $.get('/api/rooms/')
-                .done(data => {
-                    $('#roomList').html(JSON.stringify(data, null, 2));
-                    updateRoomSelect(data);
-                })
-                .fail(err => {
-                    $('#roomList').html('에러: ' + err.responseJSON.error);
-                });
-        }
-
-        let socket = null;
-        let currentRoomId = null;
-
-        function connectWebSocket(roomId) {
-            if (socket) {
-                socket.close();
-            }
-
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${wsProtocol}//${window.location.host}/ws/chat/${roomId}/`;
-            
-            socket = new WebSocket(wsUrl);
-            currentRoomId = roomId;
-
-            socket.onmessage = function(e) {
-                const messageDiv = document.createElement('div');
-                const data = JSON.parse(e.data);
-                if (data.type === 'message') {
-                    messageDiv.innerHTML = `<strong>${data.user}:</strong> ${data.message}`;
-                } else if (data.type === 'join') {
-                    messageDiv.innerHTML = `<em>${data.user}님이 입장하셨습니다.</em>`;
-                } else if (data.type === 'leave') {
-                    messageDiv.innerHTML = `<em>${data.user}님이 퇴장하셨습니다.</em>`;
+            const getRecentMessages = async (roomId) => {
+                try {
+                    const response = await fetch(`/api/rooms/${roomId}/messages/?limit=10`);
+                    const data = await response.json();
+                    // 최근 메시지를 시간순으로 정렬하여 설정
+                    setMessages(data.results.reverse().map(msg => ({
+                        type: 'message',
+                        user: msg.sender.username,
+                        message: msg.content,
+                        timestamp: msg.created_at
+                    })));
+                } catch (err) {
+                    console.error('최근 메시지 로딩 실패:', err);
                 }
-                const container = document.getElementById('messageContainer');
-                container.appendChild(messageDiv);
-                container.scrollTop = container.scrollHeight;
             };
 
-            socket.onclose = function(e) {
-                console.log('WebSocket 연결이 종료되었습니다.');
-                currentRoomId = null;
+            const searchUsers = async () => {
+                try {
+                    const response = await fetch(`/api/users/search/?q=${searchQuery}`);
+                    const data = await response.json();
+                    setSearchResult(JSON.stringify(data, null, 2));
+                } catch (err) {
+                    setSearchResult('에러: ' + err.message);
+                }
             };
-        }
 
-        function joinRoom() {
-            const roomId = $('#joinRoomId').val();
-            if (!roomId) {
-                $('#roomActionResult').html('에러: 방 ID를 입력해주세요.');
-                return;
-            }
-            $.post(`/api/rooms/${roomId}/join/`)
-                .done(() => {
-                    $('#roomActionResult').html('방에 성공적으로 참여했습니다.');
+            const createRoom = async () => {
+                try {
+                    const response = await fetch('/api/rooms/', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken
+                        },
+                        body: JSON.stringify({ name: roomName, room_type: roomType })
+                    });
+                    const data = await response.json();
+                    setActionResult(JSON.stringify(data, null, 2));
                     getRooms();
-                    connectWebSocket(roomId);
-                })
-                .fail(err => {
-                    $('#roomActionResult').html('에러: ' + err.responseJSON.error);
-                });
-        }
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                }
+            };
 
-        function leaveRoom() {
-            const roomId = $('#joinRoomId').val();
-            if (!roomId) {
-                $('#roomActionResult').html('에러: 방 ID를 입력해주세요.');
-                return;
-            }
-            if (socket) {
-                socket.close();
-                socket = null;
-            }
-            $.post(`/api/rooms/${roomId}/leave/`)
-                .done(() => {
-                    $('#roomActionResult').html('방에서 성공적으로 나갔습니다.');
+            const getRooms = async () => {
+                try {
+                    const response = await fetch('/api/rooms/');
+                    const data = await response.json();
+                    setRooms(data);
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                }
+            };
+
+            const connectWebSocket = (roomId) => {
+                if (socket) {
+                    socket.close();
+                }
+
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${wsProtocol}//${window.location.host}/ws/chat/${roomId}/`;
+                
+                const newSocket = new WebSocket(wsUrl);
+                setSocket(newSocket);
+
+                newSocket.onmessage = (e) => {
+                    const data = JSON.parse(e.data);
+                    setMessages(prev => [...prev, data]);
+                };
+
+                newSocket.onclose = () => {
+                    console.log('WebSocket 연결이 종료되었습니다.');
+                };
+
+                return newSocket;
+            };
+
+            const joinRoom = async (roomId = null) => {
+                const targetRoomId = roomId || joinRoomId;
+                if (!targetRoomId) {
+                    setActionResult('에러: 방 ID를 입력해주세요.');
+                    return;
+                }
+                try {
+                    await fetch(`/api/rooms/${targetRoomId}/join/`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrftoken }
+                    });
+                    setActionResult('방에 성공적으로 참여했습니다.');
+                    setJoinRoomId(targetRoomId.toString());
+                    setCurrentRoomId(targetRoomId);
                     getRooms();
-                    document.getElementById('messageContainer').innerHTML = '';
-                })
-                .fail(err => {
-                    $('#roomActionResult').html('에러: ' + err.responseJSON.error);
-                });
+                    await getRecentMessages(targetRoomId);
+                    const newSocket = connectWebSocket(targetRoomId);
+                    setSocket(newSocket);
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                }
+            };
+
+            const leaveRoom = async () => {
+                if (!joinRoomId) {
+                    setActionResult('에러: 방 ID를 입력해주세요.');
+                    return;
+                }
+                if (socket) {
+                    socket.close();
+                    setSocket(null);
+                }
+                try {
+                    await fetch(`/api/rooms/${joinRoomId}/leave/`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrftoken }
+                    });
+                    setActionResult('방에서 성공적으로 나갔습니다.');
+                    setMessages([]);
+                    getRooms();
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                }
+            };
+
+            const sendMessage = () => {
+                if (!messageText.trim()) {
+                    return;
+                }
+
+                if (!socket || socket.readyState !== WebSocket.OPEN) {
+                    setActionResult('에러: WebSocket 연결이 없습니다.');
+                    return;
+                }
+
+                try {
+                    socket.send(JSON.stringify({ message: messageText }));
+                    setMessageText('');
+                } catch (err) {
+                    console.error('메시지 전송 오류:', err);
+                    setActionResult('에러: 메시지 전송에 실패했습니다.');
+                }
+            };
+
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    sendMessage();
+                }
+            };
+
+            return (
+                <div className="chat-container">
+                    <div className="sidebar">
+                        <div className="sidebar-header">
+                            <div className="d-flex justify-content-between align-items-center">
+                                <h5 className="mb-0">채팅</h5>
+                                <button 
+                                    className="new-chat-button"
+                                    onClick={() => {
+                                        const name = prompt('채팅방 이름을 입력하세요:');
+                                        if (name) {
+                                            setRoomName(name);
+                                            createRoom();
+                                        }
+                                    }}
+                                >
+                                    <i className="fas fa-plus"></i> 새 채팅
+                                </button>
+                            </div>
+                        </div>
+                        <div className="room-list">
+                            {rooms.results && rooms.results.map((room) => (
+                                <div
+                                    key={room.id}
+                                    className={`room-item ${currentRoomId === room.id ? 'active' : ''}`}
+                                    onClick={() => joinRoom(room.id)}
+                                >
+                                    <div className="room-name">{room.name}</div>
+                                    <div className="room-type">
+                                        {room.room_type === 'group' ? '그룹 채팅' : '1:1 채팅'}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="main-content">
+                        {currentRoomId ? (
+                            <React.Fragment>
+                                <div className="chat-header">
+                                    <h5 className="mb-0">
+                                        {rooms.results && rooms.results.find(r => r.id === currentRoomId) && rooms.results.find(r => r.id === currentRoomId).name}
+                                    </h5>
+                                    <button 
+                                        className="btn btn-outline-danger"
+                                        onClick={leaveRoom}
+                                    >
+                                        나가기
+                                    </button>
+                                </div>
+                                <div className="message-container" ref={messageContainerRef}>
+                                    {messages.map((msg, index) => (
+                                        <div key={index} className={`message ${msg.user === '{{ user.username }}' ? 'sent' : 'received'}`}>
+                                            {msg.type === 'message' ? (
+                                                <React.Fragment>
+                                                    <div className="message-header">
+                                                        {msg.user}
+                                                    </div>
+                                                    <div className="message-bubble">
+                                                        {msg.message}
+                                                    </div>
+                                                    {msg.timestamp && (
+                                                        <div className="message-timestamp">
+                                                            {new Date(msg.timestamp).toLocaleString()}
+                                                        </div>
+                                                    )}
+                                                </React.Fragment>
+                                            ) : (
+                                                <div className="system-message">
+                                                    {msg.user}님이 {msg.type === 'join' ? '입장' : '퇴장'}하셨습니다.
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="message-input-container">
+                                    <div className="message-input-wrapper">
+                                        <input
+                                            type="text"
+                                            className="message-input"
+                                            placeholder="메시지를 입력하세요..."
+                                            value={messageText}
+                                            onChange={(e) => setMessageText(e.target.value)}
+                                            onKeyDown={handleKeyPress}
+                                        />
+                                        <button 
+                                            className="send-button" 
+                                            onClick={sendMessage}
+                                            disabled={!messageText.trim()}
+                                        >
+                                            <i className="fas fa-paper-plane"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </React.Fragment>
+                        ) : (
+                            <div className="d-flex align-items-center justify-content-center h-100">
+                                <div className="text-center text-muted">
+                                    <i className="fas fa-comments fa-3x mb-3"></i>
+                                    <h5>채팅방을 선택해주세요</h5>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
         }
 
-        function updateRoomSelect(rooms) {
-            const select = $('#roomSelect');
-            select.empty();
-            rooms.results.forEach(room => {
-                select.append(new Option(room.name, room.id));
-            });
-        }
-
-        function sendMessage() {
-            const roomId = $('#roomSelect').val();
-            const content = $('#messageText').val();
-            
-            if (roomId !== currentRoomId) {
-                $('#messageResult').html('에러: 먼저 채팅방에 참여해주세요.');
-                return;
-            }
-
-            if (!socket || socket.readyState !== WebSocket.OPEN) {
-                $('#messageResult').html('에러: WebSocket 연결이 없습니다.');
-                return;
-            }
-
-            socket.send(JSON.stringify({
-                message: content
-            }));
-            
-            $('#messageText').val('');
-            $('#messageResult').html('');
-        }
-
-        // 초기 채팅방 목록 로드
-        getRooms();
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<ChatApp />);
     </script>
 </body>
 </html> 
