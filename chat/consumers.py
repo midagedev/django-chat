@@ -47,13 +47,19 @@ class ChatConsumer(AsyncWebsocketConsumer):
         text_data_json = json.loads(text_data)
         message = text_data_json["message"]
 
-        # 메시지 저장
-        await self.save_message(message)
-
-        # 채팅방 그룹에 메시지 전송
+        # 메시지 저장과 브로드캐스팅을 분리하여 처리
         await self.channel_layer.group_send(
             self.room_group_name,
             {"type": "chat_message", "message": message, "user": self.user.username},
+        )
+
+        # 메시지 저장을 위한 이벤트 발송
+        await self.channel_layer.send(
+            self.channel_name,
+            {
+                "type": "save_message_handler",
+                "message": message,
+            },
         )
 
     async def chat_message(self, event):
@@ -90,3 +96,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def save_message(self, message):
         Message.objects.create(room_id=self.room_id, sender=self.user, content=message)
+
+    async def save_message_handler(self, event):
+        # 메시지 저장 처리
+        await self.save_message(event["message"])
