@@ -2,6 +2,8 @@
 
 Django와 Channels를 활용한 확장성 있는 실시간 채팅 애플리케이션입니다. WebSocket을 통한 양방향 통신으로 즉각적인 메시지 전송과 상태 업데이트를 제공합니다.
 
+테스트용주소[https://www.midagedev.com/test/]
+
 ## 시스템 개요
 
 이 애플리케이션은 다음 요구사항을 충족하도록 설계되었습니다:
@@ -15,9 +17,14 @@ Django와 Channels를 활용한 확장성 있는 실시간 채팅 애플리케�
 
 ## 아키텍쳐
 
-- **프론트엔드**: REST API와 WebSocket 연결을 통해 백엔드와 통신
+- **프론트엔드**: REST API와 WebSocket 연결을 통해 백엔드와 통신, 기본은 쿠키기반의 세션으로 만들어져 있으나 앱 통신을 고려한 JWT기반도 추가되어 있음
 - **백엔드**: Django + Channels로 HTTP와 WebSocket 요청 처리
 - **데이터 저장소**: PostgreSQL(영구 데이터), Redis(채널 레이어 및 캐싱)
+
+<img width="946" alt="image" src="https://github.com/user-attachments/assets/596bb19d-3910-44ac-a52c-048f124e9bd2" />
+
+- postgres와 redis는 적절히 스케일업 하기만 하면 왠만한 트래픽에 대해 문제가 없습니다.
+- 다만 어플리케이션 서버의 경우에는 로드밸런서가 필요합니다. 간단히는 AWS의 로드밸런서에 스티키니스를 설정하고 타겟그룹의 인스턴스들을 커넥션 갯수에 따라 스케일러블하게 구성하는 것으로 대부분의 트래픽에 대응할 수 있을 것이라고 생각합니다.
 
 ## 기술 스택
 
