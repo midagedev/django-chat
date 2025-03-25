@@ -216,6 +216,92 @@
         .new-chat-button:hover {
             background-color: #0b5ed7;
         }
+        /* 온라인 상태 관련 스타일 */
+        .online-badge {
+            font-size: 0.75em;
+            padding: 0.25em 0.5em;
+            border-radius: 1em;
+        }
+        .user-list-panel {
+            transition: all 0.3s ease;
+            animation: slideIn 0.3s forwards;
+        }
+        .system-message {
+            text-align: center;
+            background-color: rgba(0,0,0,0.05);
+            padding: 6px 12px;
+            border-radius: 15px;
+            margin: 10px auto;
+            font-size: 0.85em;
+            color: #6c757d;
+            max-width: 80%;
+        }
+        .cursor-pointer {
+            cursor: pointer;
+        }
+        .cursor-pointer:hover {
+            text-decoration: underline;
+            color: #0d6efd;
+        }
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        /* 추가된 인라인 스타일 대체용 클래스 */
+        .online-user-card-body {
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .user-list-panel-container {
+            width: 250px;
+            border-right: 1px solid #dee2e6;
+            overflow-y: auto;
+            background-color: white;
+        }
+        .small-circle-icon {
+            font-size: 0.5rem;
+        }
+        /* 사용자 프로필 영역 스타일 */
+        .user-profile {
+            padding: 15px;
+            border-bottom: 1px solid #dee2e6;
+            background-color: #f8f9fa;
+        }
+        .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #0d6efd;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .mini-avatar {
+            width: 25px;
+            height: 25px;
+            font-size: 0.7rem;
+        }
+        .online-user-item {
+            transition: all 0.2s;
+        }
+        .online-user-item:hover {
+            background-color: rgba(13, 110, 253, 0.05);
+        }
+        .dm-icon {
+            visibility: hidden;
+        }
+        .online-user-item:hover .dm-icon {
+            visibility: visible;
+        }
     </style>
 </head>
 <body>
@@ -224,31 +310,87 @@
 
     <script type="text/babel" data-presets="custom">
         function ChatApp() {
-            const [searchQuery, setSearchQuery] = React.useState('');
-            const [searchResult, setSearchResult] = React.useState('');
-            const [roomName, setRoomName] = React.useState('');
-            const [roomType, setRoomType] = React.useState('group');
-            const [joinRoomId, setJoinRoomId] = React.useState('');
+            // 필수 상태 변수들
             const [rooms, setRooms] = React.useState({ results: [] });
             const [messageText, setMessageText] = React.useState('');
             const [messages, setMessages] = React.useState([]);
             const [currentRoomId, setCurrentRoomId] = React.useState(null);
             const [socket, setSocket] = React.useState(null);
+            const [globalSocket, setGlobalSocket] = React.useState(null);
             const [actionResult, setActionResult] = React.useState('');
+            const [allOnlineUsers, setAllOnlineUsers] = React.useState([]);
+            const [roomUsers, setRoomUsers] = React.useState([]);
+            const [showUserList, setShowUserList] = React.useState(false);
+            const [currentUser, setCurrentUser] = React.useState(null);
+            const [isLoading, setIsLoading] = React.useState(false);
+            
+            // 검색 및 채팅방 생성 관련 상태
+            const [searchQuery, setSearchQuery] = React.useState('');
             const [searchedUsers, setSearchedUsers] = React.useState([]);
+            const [roomName, setRoomName] = React.useState('');
+            const [roomType, setRoomType] = React.useState('group');
+            const [joinRoomId, setJoinRoomId] = React.useState('');
+            
             const messageContainerRef = React.useRef(null);
-
             const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
+            // 초기화 효과
             React.useEffect(() => {
+                // 사용자 정보 및 채팅방 불러오기
+                getCurrentUser();
                 getRooms();
+                getAllOnlineUsers();
+                
+                // 전역 소켓 연결 (접속자 상태 업데이트용)
+                connectGlobalSocket();
+                
+                // 온라인 사용자 정보 주기적 업데이트 (30초마다)
+                const intervalId = setInterval(() => {
+                    getAllOnlineUsers();
+                    if (currentRoomId) {
+                        getRoomUsers(currentRoomId);
+                    }
+                }, 30000);
+
+                return () => {
+                    clearInterval(intervalId);
+                    if (globalSocket) {
+                        globalSocket.close();
+                    }
+                    if (socket) {
+                        socket.close();
+                    }
+                };
             }, []);
 
+            // 메시지 스크롤 효과
             React.useEffect(() => {
                 if (messageContainerRef.current) {
                     messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
                 }
             }, [messages]);
+
+            // API 호출 함수들
+            const getCurrentUser = async () => {
+                try {
+                    const response = await fetch('/api/users/me/');
+                    const data = await response.json();
+                    setCurrentUser(data);
+                } catch (err) {
+                    console.error('사용자 정보 로딩 실패:', err);
+                }
+            };
+
+            const getRooms = async () => {
+                try {
+                    // 모든 채팅방을 불러옵니다.
+                    const response = await fetch('/api/rooms/');
+                    const data = await response.json();
+                    setRooms(data);
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                }
+            };
 
             const getRecentMessages = async (roomId) => {
                 try {
@@ -266,26 +408,39 @@
                 }
             };
 
-            const searchUsers = async () => {
-                if (searchQuery.length < 3) {
-                    setSearchedUsers([]);
-                    setActionResult('검색어는 3자 이상 입력해주세요.');
-                    return;
-                }
-
+            const getAllOnlineUsers = async () => {
                 try {
-                    const response = await fetch(`/api/users/search/?q=${searchQuery}`);
+                    const response = await fetch('/api/users/online/');
                     const data = await response.json();
-                    setSearchedUsers(data);
-                    setActionResult('');
+                    console.log('온라인 사용자 데이터:', data);
+                    
+                    // 응답 구조 확인 및 안전하게 처리
+                    if (data && data.users) {
+                        setAllOnlineUsers(data.users);
+                    } else {
+                        console.error('예상치 못한 응답 구조:', data);
+                        setAllOnlineUsers([]);
+                    }
                 } catch (err) {
-                    setActionResult('에러: ' + err.message);
-                    setSearchedUsers([]);
+                    console.error('온라인 사용자 정보 로딩 실패:', err);
+                    setAllOnlineUsers([]);
                 }
             };
 
+            const getRoomUsers = async (roomId) => {
+                try {
+                    const response = await fetch(`/api/rooms/${roomId}/users/`);
+                    const data = await response.json();
+                    setRoomUsers(data.users);
+                } catch (err) {
+                    console.error('방 참여자 정보 로딩 실패:', err);
+                }
+            };
+
+            // 채팅방 생성 및 참여 함수들
             const createRoom = async () => {
                 try {
+                    setIsLoading(true);
                     const response = await fetch('/api/rooms/', {
                         method: 'POST',
                         headers: {
@@ -295,15 +450,20 @@
                         body: JSON.stringify({ name: roomName, room_type: roomType })
                     });
                     const data = await response.json();
-                    setActionResult(JSON.stringify(data, null, 2));
-                    getRooms();
+                    setActionResult('채팅방이 생성되었습니다.');
+                    await getRooms();
+                    setRoomName('');
+                    setIsLoading(false);
                 } catch (err) {
                     setActionResult('에러: ' + err.message);
+                    setIsLoading(false);
                 }
             };
 
             const createDirectChat = async (userId) => {
                 try {
+                    setIsLoading(true);
+                    setActionResult('1:1 대화방 생성 중...');
                     const response = await fetch('/api/rooms/create_direct_chat/', {
                         method: 'POST',
                         headers: {
@@ -316,27 +476,114 @@
                     
                     if (response.ok) {
                         setActionResult('1:1 대화방이 생성되었습니다.');
-                        getRooms();
+                        await getRooms();
+                        // 생성된 방으로 바로 입장
+                        joinRoom(data.id);
                         setSearchedUsers([]);
                         setSearchQuery('');
                     } else {
                         setActionResult('에러: ' + data.error);
                     }
+                    setIsLoading(false);
                 } catch (err) {
                     setActionResult('에러: ' + err.message);
+                    setIsLoading(false);
                 }
             };
 
-            const getRooms = async () => {
+            const joinRoom = async (roomId = null) => {
+                const targetRoomId = roomId || joinRoomId;
+                if (!targetRoomId) {
+                    setActionResult('에러: 방 ID를 입력해주세요.');
+                    return;
+                }
+                
                 try {
-                    const response = await fetch('/api/rooms/');
-                    const data = await response.json();
-                    setRooms(data);
+                    setIsLoading(true);
+                    
+                    // 현재 사용자가 해당 방에 이미 참여 중인지 확인
+                    const room = rooms.results.find(r => r.id === targetRoomId);
+                    
+                    // 디버깅용 로그 추가
+                    console.log('방 정보:', room);
+                    console.log('현재 사용자:', currentUser);
+                    console.log('참여자 목록:', room?.participants);
+                    
+                    // participants 배열이 있는지 확인하고, 현재 사용자의 ID가 포함되어 있는지 확인
+                    const isAlreadyJoined = room && 
+                                          Array.isArray(room.participants) && 
+                                          currentUser && 
+                                          room.participants.some(p => p.user && p.user.id === currentUser.id);
+                    
+                    console.log('이미 참여 중?', isAlreadyJoined);
+                    
+                    // 참여 중이 아니면 join API 호출
+                    if (!isAlreadyJoined) {
+                        const response = await fetch(`/api/rooms/${targetRoomId}/join/`, {
+                            method: 'POST',
+                            headers: { 'X-CSRFToken': csrftoken }
+                        });
+                        
+                        // 응답 확인 및 오류 처리
+                        const data = await response.json();
+                        
+                        if (!response.ok) {
+                            throw new Error(data.error || '채팅방 참여 중 오류가 발생했습니다.');
+                        }
+                        
+                        setActionResult('방에 성공적으로 참여했습니다.');
+                    } else {
+                        setActionResult('채팅방에 입장했습니다.');
+                    }
+                    
+                    setJoinRoomId(targetRoomId.toString());
+                    setCurrentRoomId(targetRoomId);
+                    
+                    // 데이터 불러오기
+                    await getRecentMessages(targetRoomId);
+                    await getRoomUsers(targetRoomId);
+                    
+                    // 웹소켓 연결
+                    connectWebSocket(targetRoomId);
+                    
+                    setIsLoading(false);
                 } catch (err) {
+                    console.error('채팅방 참여 오류:', err);
                     setActionResult('에러: ' + err.message);
+                    setIsLoading(false);
                 }
             };
 
+            const leaveRoom = async () => {
+                if (!currentRoomId) {
+                    setActionResult('에러: 방에 참여 중이 아닙니다.');
+                    return;
+                }
+                
+                if (socket) {
+                    socket.close();
+                    setSocket(null);
+                }
+                
+                try {
+                    setIsLoading(true);
+                    await fetch(`/api/rooms/${currentRoomId}/leave/`, {
+                        method: 'POST',
+                        headers: { 'X-CSRFToken': csrftoken }
+                    });
+                    
+                    setActionResult('방에서 성공적으로 나갔습니다.');
+                    setMessages([]);
+                    setCurrentRoomId(null);
+                    await getRooms();
+                    setIsLoading(false);
+                } catch (err) {
+                    setActionResult('에러: ' + err.message);
+                    setIsLoading(false);
+                }
+            };
+
+            // 웹소켓 관련 함수들
             const connectWebSocket = (roomId) => {
                 if (socket) {
                     socket.close();
@@ -350,61 +597,87 @@
 
                 newSocket.onmessage = (e) => {
                     const data = JSON.parse(e.data);
-                    setMessages(prev => [...prev, data]);
+                    if (data.type === 'message' || data.type === 'join' || data.type === 'leave') {
+                        setMessages(prev => [...prev, data]);
+                    } else if (data.type === 'online_status') {
+                        // 채팅방 사용자의 온라인 상태 업데이트
+                        setRoomUsers(data.users);
+                    }
+                };
+
+                // 하트비트 설정
+                let heartbeatInterval;
+                
+                newSocket.onopen = () => {
+                    // 5초마다 하트비트 메시지 전송
+                    heartbeatInterval = setInterval(() => {
+                        if (newSocket.readyState === WebSocket.OPEN) {
+                            newSocket.send(JSON.stringify({ type: 'heartbeat' }));
+                        }
+                    }, 5000);
+                };
+                
+                // 소켓 종료 시 하트비트 정지
+                newSocket.addEventListener('close', () => {
+                    if (heartbeatInterval) {
+                        clearInterval(heartbeatInterval);
+                    }
+                });
+
+                return newSocket;
+            };
+
+            const connectGlobalSocket = () => {
+                const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${wsProtocol}//${window.location.host}/ws/online/`;
+                
+                console.log('글로벌 웹소켓 연결 시도:', wsUrl);
+                const newSocket = new WebSocket(wsUrl);
+                setGlobalSocket(newSocket);
+
+                newSocket.onmessage = (e) => {
+                    const data = JSON.parse(e.data);
+                    console.log('글로벌 웹소켓 메시지 수신:', data);
+                    if (data.type === 'online_users_update') {
+                        console.log('온라인 사용자 목록 업데이트 요청 수신');
+                        getAllOnlineUsers(); // 온라인 상태 변경 시 목록 갱신
+                    }
+                };
+
+                newSocket.onopen = () => {
+                    console.log('글로벌 웹소켓 연결 성공');
+                    
+                    // 5초마다 하트비트 메시지 전송
+                    const heartbeatInterval = setInterval(() => {
+                        if (newSocket.readyState === WebSocket.OPEN) {
+                            newSocket.send(JSON.stringify({ type: 'heartbeat' }));
+                        }
+                    }, 5000);
+                    
+                    // 소켓 종료 시 하트비트 정지
+                    newSocket.addEventListener('close', () => {
+                        if (heartbeatInterval) {
+                            clearInterval(heartbeatInterval);
+                        }
+                    });
                 };
 
                 newSocket.onclose = () => {
-                    console.log('WebSocket 연결이 종료되었습니다.');
+                    console.log('글로벌 WebSocket 연결이 종료되었습니다.');
+                    // 재연결 시도
+                    setTimeout(() => {
+                        connectGlobalSocket();
+                    }, 3000);
+                };
+
+                newSocket.onerror = (error) => {
+                    console.error('글로벌 웹소켓 오류:', error);
                 };
 
                 return newSocket;
             };
 
-            const joinRoom = async (roomId = null) => {
-                const targetRoomId = roomId || joinRoomId;
-                if (!targetRoomId) {
-                    setActionResult('에러: 방 ID를 입력해주세요.');
-                    return;
-                }
-                try {
-                    await fetch(`/api/rooms/${targetRoomId}/join/`, {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrftoken }
-                    });
-                    setActionResult('방에 성공적으로 참여했습니다.');
-                    setJoinRoomId(targetRoomId.toString());
-                    setCurrentRoomId(targetRoomId);
-                    getRooms();
-                    await getRecentMessages(targetRoomId);
-                    const newSocket = connectWebSocket(targetRoomId);
-                    setSocket(newSocket);
-                } catch (err) {
-                    setActionResult('에러: ' + err.message);
-                }
-            };
-
-            const leaveRoom = async () => {
-                if (!joinRoomId) {
-                    setActionResult('에러: 방 ID를 입력해주세요.');
-                    return;
-                }
-                if (socket) {
-                    socket.close();
-                    setSocket(null);
-                }
-                try {
-                    await fetch(`/api/rooms/${joinRoomId}/leave/`, {
-                        method: 'POST',
-                        headers: { 'X-CSRFToken': csrftoken }
-                    });
-                    setActionResult('방에서 성공적으로 나갔습니다.');
-                    setMessages([]);
-                    getRooms();
-                } catch (err) {
-                    setActionResult('에러: ' + err.message);
-                }
-            };
-
+            // 채팅 기능 관련 함수들
             const sendMessage = () => {
                 if (!messageText.trim()) {
                     return;
@@ -431,48 +704,53 @@
                 }
             };
 
+            const toggleUserList = () => {
+                setShowUserList(!showUserList);
+            };
+
+            // 헬퍼 함수들
+            const getInitial = (name) => {
+                return name ? name.charAt(0).toUpperCase() : '?';
+            };
+
+            // 온라인 상태 표시 아이콘 컴포넌트
+            const OnlineStatusIcon = ({ isOnline }) => (
+                <span className={`ms-2 badge ${isOnline ? 'bg-success' : 'bg-secondary'} online-badge`}>
+                    <i className="fas fa-circle me-1 small-circle-icon"></i>
+                    {isOnline ? '온라인' : '오프라인'}
+                </span>
+            );
+
+            // UI 렌더링
             return (
                 <div className="chat-container">
                     <div className="sidebar">
-                        <div className="sidebar-header">
-                            <h4 className="mb-3">채팅</h4>
-                            
-                            {/* 사용자 검색 섹션 */}
-                            <div className="mb-3">
-                                <div className="input-group">
-                                    <input
-                                        type="text"
-                                        className="form-control"
-                                        placeholder="사용자 검색 (3자 이상)"
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        onKeyPress={(e) => e.key === 'Enter' && searchUsers()}
-                                    />
-                                    <button className="btn btn-outline-primary" onClick={searchUsers}>
-                                        <i className="fas fa-search"></i>
-                                    </button>
+                        {/* 사용자 프로필 정보 */}
+                        {currentUser && (
+                            <div className="user-profile d-flex align-items-center">
+                                <div className="user-avatar">
+                                    {getInitial(currentUser.username)}
+                                </div>
+                                <div>
+                                    <div className="fw-bold">{currentUser.username}</div>
+                                    <small className="text-muted">{currentUser.email}</small>
                                 </div>
                             </div>
+                        )}
 
-                            {/* 검색 결과 표시 */}
-                            {searchedUsers.length > 0 && (
-                                <div className="list-group mb-3">
-                                    {searchedUsers.map(user => (
-                                        <button
-                                            key={user.id}
-                                            className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                                            onClick={() => createDirectChat(user.id)}
-                                        >
-                                            <div>
-                                                <div>{user.username}</div>
-                                                <small className="text-muted">{user.email}</small>
-                                            </div>
-                                            <i className="fas fa-comment-dots text-primary"></i>
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-
+                        <div className="sidebar-header">
+                            <div className="d-flex justify-content-between align-items-center mb-3">
+                                <h4 className="mb-0">채팅</h4>
+                                <button 
+                                    className="btn btn-sm btn-outline-info" 
+                                    onClick={getAllOnlineUsers}
+                                    title="온라인 상태 새로고침"
+                                    disabled={isLoading}
+                                >
+                                    <i className={`fas ${isLoading ? 'fa-spinner fa-spin' : 'fa-sync-alt'}`}></i>
+                                </button>
+                            </div>
+                            
                             {/* 새 그룹 채팅방 생성 */}
                             <div className="mb-3">
                                 <div className="input-group">
@@ -483,11 +761,12 @@
                                         value={roomName}
                                         onChange={(e) => setRoomName(e.target.value)}
                                         onKeyPress={(e) => e.key === 'Enter' && createRoom()}
+                                        disabled={isLoading}
                                     />
                                     <button 
                                         className="btn btn-success" 
                                         onClick={createRoom}
-                                        disabled={!roomName.trim()}
+                                        disabled={!roomName.trim() || isLoading}
                                     >
                                         <i className="fas fa-plus"></i>
                                     </button>
@@ -498,34 +777,102 @@
                             {actionResult && (
                                 <div className="alert alert-info py-2 small">{actionResult}</div>
                             )}
+                            
+                            {/* 접속자 목록 */}
+                            <div className="mb-3">
+                                <div className="card">
+                                    <div className="card-header py-2 d-flex justify-content-between align-items-center">
+                                        <small className="fw-bold">접속자 목록</small>
+                                        <span className="badge bg-success online-badge">{allOnlineUsers ? `${allOnlineUsers.filter(user => user.is_online).length}/${allOnlineUsers.length}` : '0/0'}</span>
+                                    </div>
+                                    <div className="card-body p-0 online-user-card-body">
+                                        <div className="list-group list-group-flush small">
+                                            {allOnlineUsers && allOnlineUsers
+                                                .filter(user => user.is_online)
+                                                .map(user => (
+                                                <div 
+                                                    key={user.id} 
+                                                    className={`list-group-item py-2 d-flex justify-content-between align-items-center cursor-pointer online-user-item ${currentUser && user.id === currentUser.id ? 'bg-light' : ''}`}
+                                                    onClick={() => currentUser && user.id !== currentUser.id && !isLoading && createDirectChat(user.id)}
+                                                >
+                                                    <div className="d-flex align-items-center">
+                                                        <div className="user-avatar mini-avatar me-2">
+                                                            {getInitial(user.username)}
+                                                        </div>
+                                                        <span>
+                                                            {user.username}
+                                                            {currentUser && user.id === currentUser.id && <span className="ms-1 badge bg-info">나</span>}
+                                                        </span>
+                                                    </div>
+                                                    <div className="d-flex align-items-center">
+                                                        <OnlineStatusIcon isOnline={true} />
+                                                        {currentUser && user.id !== currentUser.id && (
+                                                            <i className="fas fa-comment-dots text-primary ms-1 dm-icon"></i>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {allOnlineUsers && allOnlineUsers.filter(user => user.is_online).length === 0 && (
+                                                <div className="list-group-item py-2 text-center text-muted">
+                                                    접속자가 없습니다
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
                         {/* 채팅방 목록 */}
                         <ul className="room-list">
-                            {rooms.results.map(room => (
-                                <li
-                                    key={room.id}
-                                    className={`room-item ${currentRoomId === room.id ? 'active' : ''}`}
-                                    onClick={() => joinRoom(room.id)}
-                                >
-                                    <div className="room-name">
-                                        <i className={`fas fa-${room.room_type === 'direct' ? 'user' : 'users'} me-2`}></i>
-                                        {room.name}
-                                    </div>
-                                    <div className="room-type text-muted small">
-                                        {room.room_type === 'direct' ? '1:1 대화' : '그룹 채팅'}
-                                    </div>
-                                </li>
-                            ))}
+                            {rooms.results.map(room => {
+                                // 방에 참여 중인 온라인 사용자 수 계산
+                                const roomOnlineCount = room.participants_count && allOnlineUsers ? 
+                                    allOnlineUsers.filter(user => 
+                                        room.participants && room.participants.includes(user.id) && user.is_online
+                                    ).length : 0;
+                                
+                                return (
+                                    <li
+                                        key={room.id}
+                                        className={`room-item ${currentRoomId === room.id ? 'active' : ''}`}
+                                        onClick={() => !isLoading && joinRoom(room.id)}
+                                    >
+                                        <div className="room-name">
+                                            <i className={`fas fa-${room.room_type === 'direct' ? 'user' : 'users'} me-2`}></i>
+                                            {room.name}
+                                            {roomOnlineCount > 0 && (
+                                                <span className="ms-2 badge bg-success online-badge">
+                                                    <i className="fas fa-circle me-1 small-circle-icon"></i>
+                                                    {roomOnlineCount}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="room-type text-muted small">
+                                            {room.room_type === 'direct' ? '1:1 대화' : '그룹 채팅'}
+                                        </div>
+                                    </li>
+                                );
+                            })}
                         </ul>
                     </div>
                     <div className="main-content">
                         {currentRoomId ? (
                             <React.Fragment>
                                 <div className="chat-header">
-                                    <h5 className="mb-0">
-                                        {rooms.results && rooms.results.find(r => r.id === currentRoomId) && rooms.results.find(r => r.id === currentRoomId).name}
-                                    </h5>
+                                    <div className="d-flex align-items-center">
+                                        <h5 className="mb-0">
+                                            {rooms.results && rooms.results.find(r => r.id === currentRoomId) && rooms.results.find(r => r.id === currentRoomId).name}
+                                        </h5>
+                                        <button 
+                                            className="btn btn-sm btn-outline-primary ms-3" 
+                                            onClick={toggleUserList}
+                                            title="참여자 목록"
+                                        >
+                                            <i className="fas fa-users me-1"></i>
+                                            {roomUsers && roomUsers.length > 0 ? `${roomUsers.filter(user => user.is_online).length}/${roomUsers.length}` : '0/0'}
+                                        </button>
+                                    </div>
                                     <button 
                                         className="btn btn-outline-danger"
                                         onClick={leaveRoom}
@@ -533,30 +880,59 @@
                                         나가기
                                     </button>
                                 </div>
-                                <div className="message-container" ref={messageContainerRef}>
-                                    {messages.map((msg, index) => (
-                                        <div key={index} className={`message ${msg.user === '{{ user.username }}' ? 'sent' : 'received'}`}>
-                                            {msg.type === 'message' ? (
-                                                <React.Fragment>
-                                                    <div className="message-header">
-                                                        {msg.user}
-                                                    </div>
-                                                    <div className="message-bubble">
-                                                        {msg.message}
-                                                    </div>
-                                                    {msg.timestamp && (
-                                                        <div className="message-timestamp">
-                                                            {new Date(msg.timestamp).toLocaleString()}
-                                                        </div>
-                                                    )}
-                                                </React.Fragment>
-                                            ) : (
-                                                <div className="system-message">
-                                                    {msg.user}님이 {msg.type === 'join' ? '입장' : '퇴장'}하셨습니다.
+                                
+                                <div className="d-flex flex-grow-1">
+                                    {/* 참여자 목록 패널 */}
+                                    {showUserList && (
+                                        <div className="user-list-panel user-list-panel-container">
+                                            <div className="p-3 border-bottom">
+                                                <h6 className="mb-2">참여자 목록</h6>
+                                                <div className="d-flex justify-content-between small mb-1">
+                                                    <span>총 참여자</span>
+                                                    <span>{roomUsers ? roomUsers.length : 0}명</span>
                                                 </div>
-                                            )}
+                                                <div className="d-flex justify-content-between small text-success">
+                                                    <span>온라인</span>
+                                                    <span>{roomUsers ? roomUsers.filter(user => user.is_online).length : 0}명</span>
+                                                </div>
+                                            </div>
+                                            <ul className="list-group list-group-flush">
+                                                {roomUsers && roomUsers.map(user => (
+                                                    <li key={user.id} className="list-group-item d-flex justify-content-between align-items-center">
+                                                        <span>{user.username}</span>
+                                                        <OnlineStatusIcon isOnline={user.is_online} />
+                                                    </li>
+                                                ))}
+                                            </ul>
                                         </div>
-                                    ))}
+                                    )}
+                                    
+                                    {/* 메시지 컨테이너 */}
+                                    <div className="message-container flex-grow-1" ref={messageContainerRef}>
+                                        {messages.map((msg, index) => (
+                                            <div key={index} className={`message ${msg.user === '{{ user.username }}' ? 'sent' : 'received'}`}>
+                                                {msg.type === 'message' ? (
+                                                    <React.Fragment>
+                                                        <div className="message-header">
+                                                            {msg.user}
+                                                        </div>
+                                                        <div className="message-bubble">
+                                                            {msg.message}
+                                                        </div>
+                                                        {msg.timestamp && (
+                                                            <div className="message-timestamp">
+                                                                {new Date(msg.timestamp).toLocaleString()}
+                                                            </div>
+                                                        )}
+                                                    </React.Fragment>
+                                                ) : (
+                                                    <div className="system-message">
+                                                        {msg.user}님이 {msg.type === 'join' ? '입장' : '퇴장'}하셨습니다.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                                 <div className="message-input-container">
                                     <div className="message-input-wrapper">
@@ -575,6 +951,26 @@
                                         >
                                             <i className="fas fa-paper-plane"></i>
                                         </button>
+                                    </div>
+                                    <div className="d-flex justify-content-between mt-2">
+                                        <small className="text-muted">
+                                            {showUserList ? (
+                                                <span className="cursor-pointer" onClick={toggleUserList}>
+                                                    <i className="fas fa-eye-slash me-1"></i>참여자 목록 숨기기
+                                                </span>
+                                            ) : (
+                                                <span className="cursor-pointer" onClick={toggleUserList}>
+                                                    <i className="fas fa-eye me-1"></i>참여자 목록 보기 
+                                                    <span className="ms-1 badge bg-success online-badge">
+                                                        {roomUsers ? roomUsers.filter(user => user.is_online).length : 0}/{roomUsers ? roomUsers.length : 0}
+                                                    </span>
+                                                </span>
+                                            )}
+                                        </small>
+                                        <small className="text-muted">
+                                            <i className="fas fa-circle text-success me-1 small-circle-icon"></i>
+                                            {roomUsers ? roomUsers.filter(user => user.is_online).length : 0}명 접속 중
+                                        </small>
                                     </div>
                                 </div>
                             </React.Fragment>

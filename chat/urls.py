@@ -20,8 +20,8 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers
 from . import views
 
-router = routers.DefaultRouter()
-router.register(r"rooms", views.ChatRoomViewSet, basename="room")
+router = DefaultRouter()
+router.register(r"rooms", views.ChatRoomViewSet, basename="chatroom")
 router.register(r"users", views.UserViewSet, basename="user")
 
 rooms_router = routers.NestedDefaultRouter(router, r"rooms", lookup="room")
