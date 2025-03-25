@@ -50,6 +50,11 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # 사용자 온라인 상태 업데이트
             await self.update_user_status(True)
 
+            # 온라인 상태 변경 알림 전송
+            await self.channel_layer.group_send(
+                self.room_group_name, {"type": "online_status_update"}
+            )
+
             # 하트비트 초기 시간 설정
             user_key = f"{self.user.id}_{self.room_id}"
             user_last_heartbeat[user_key] = time.time()
@@ -122,6 +127,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 user_key = f"{self.user.id}_{self.room_id}"
                 user_last_heartbeat[user_key] = time.time()
                 await self.update_user_status(True)
+                # 온라인 상태 변경 알림 전송
+                await self.channel_layer.group_send(
+                    self.room_group_name, {"type": "online_status_update"}
+                )
                 return
 
             # 일반 메시지 처리
@@ -229,13 +238,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
             # 전역 온라인 상태 업데이트
             self._update_global_online_status(is_online)
-
-            # 온라인 상태 변경 시 채팅방 그룹에도 알림
-            asyncio.create_task(
-                self.channel_layer.group_send(
-                    self.room_group_name, {"type": "online_status_update"}
-                )
-            )
 
             return True
         except Exception as e:
