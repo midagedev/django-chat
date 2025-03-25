@@ -18,6 +18,11 @@ from django.contrib import admin
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+    TokenVerifyView,
+)
 from . import views
 
 router = DefaultRouter()
@@ -32,4 +37,10 @@ urlpatterns = [
     path("test/", views.test_api_view, name="test_api"),
     path("api/", include(router.urls)),
     path("api/", include(rooms_router.urls)),
+    # JWT 토큰 인증 URL
+    path("api/token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("api/token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
+    path("api/token/verify/", TokenVerifyView.as_view(), name="token_verify"),
+    # 사용자 등록 API
+    path("api/register/", views.register_user, name="register"),
 ]

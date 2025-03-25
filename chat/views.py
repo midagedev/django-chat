@@ -1,17 +1,19 @@
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.core.cache import cache
 from django.shortcuts import get_object_or_404, render
+from rest_framework_simplejwt.tokens import RefreshToken
 from .models import ChatRoom, ChatRoomMember, Message
 from .serializers import (
     ChatRoomSerializer,
     MessageSerializer,
     UserSerializer,
     ChatRoomMemberSerializer,
+    UserRegistrationSerializer,
 )
 
 
@@ -262,30 +264,48 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     @action(detail=False, methods=["get"])
     def me(self, request):
         """현재 로그인한 사용자 정보 조회"""
-        serializer = self.get_serializer(request.user)
+        serializer = UserSerializer(request.user)
         return Response(serializer.data)
 
     @action(detail=False, methods=["get"])
     def online(self, request):
         """온라인 상태인 사용자 목록 조회"""
-        try:
-            # 캐시에서 전역 온라인 사용자 목록 조회
-            global_online_key = "global_online_users"
-            online_users_ids = cache.get(global_online_key) or set()
+        # Redis 캐시에서 온라인 상태인 사용자 ID 목록 조회
+        online_user_ids = cache.get("online_users", [])
+        online_users = User.objects.filter(id__in=online_user_ids)
+        serializer = UserSerializer(online_users, many=True)
+        return Response(serializer.data)
 
-            # 모든 사용자를 조회하고 온라인 상태 정보 추가
-            all_users = User.objects.all()
-            serializer = UserSerializer(all_users, many=True)
+    @action(detail=False, methods=["put"], permission_classes=[IsAuthenticated])
+    def update_profile(self, request):
+        """사용자 프로필 정보 업데이트"""
+        user = request.user
+        serializer = UserSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-            # 각 사용자에게 온라인 상태 정보 추가
-            users_with_status = []
-            for user_data in serializer.data:
-                user_data = dict(user_data)
-                user_data["is_online"] = user_data["id"] in online_users_ids
-                users_with_status.append(user_data)
 
-            return Response({"users": users_with_status})
-        except Exception as e:
-            return Response(
-                {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_user(request):
+    """사용자 등록 API
+
+    JWT 토큰 기반 인증을 위한 사용자 등록 API입니다.
+    회원가입 후 자동으로 JWT 토큰을 발급합니다.
+    """
+    serializer = UserRegistrationSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.save()
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "user": UserSerializer(user).data,
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+                "message": "회원가입이 완료되었습니다.",
+            },
+            status=status.HTTP_201_CREATED,
+        )
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
