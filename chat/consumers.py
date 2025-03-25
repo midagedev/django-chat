@@ -3,6 +3,9 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.contrib.auth.models import User
 from .models import ChatRoom, ChatRoomMember, Message
+from asgiref.sync import sync_to_async
+from django.core.cache import cache
+import asyncio
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -28,6 +31,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             self.room_group_name, {"type": "user_join", "user": self.user.username}
         )
 
+        # message worker 시작
+        self.message_worker_task = asyncio.create_task(self.message_worker())
+
     async def disconnect(self, close_code):
         if hasattr(self, "room_group_name"):
             # 사용자 오프라인 상태 업데이트
@@ -43,23 +49,24 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 self.room_group_name, {"type": "user_leave", "user": self.user.username}
             )
 
+        # message worker 정지
+        if hasattr(self, "message_worker_task"):
+            self.message_worker_task.cancel()
+
     async def receive(self, text_data):
         text_data_json = json.loads(text_data)
         message = text_data_json["message"]
 
-        # 메시지 저장과 브로드캐스팅을 분리하여 처리
+        # 메시지를 큐에 추가
+        message_key = f"message_queue_{self.room_id}"
+        pending_messages = await sync_to_async(cache.get)(message_key) or []
+        pending_messages.append({"sender": self.user.id, "content": message})
+        await sync_to_async(cache.set)(message_key, pending_messages, timeout=3600)
+
+        # 브로드캐스팅
         await self.channel_layer.group_send(
             self.room_group_name,
             {"type": "chat_message", "message": message, "user": self.user.username},
-        )
-
-        # 메시지 저장을 위한 이벤트 발송
-        await self.channel_layer.send(
-            self.channel_name,
-            {
-                "type": "save_message_handler",
-                "message": message,
-            },
         )
 
     async def chat_message(self, event):
@@ -100,3 +107,34 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def save_message_handler(self, event):
         # 메시지 저장 처리
         await self.save_message(event["message"])
+
+    async def message_worker(self):
+        while True:
+            # 처리할 메시지가 있는지 확인
+            message_key = f"message_queue_{self.room_id}"
+            pending_messages = await sync_to_async(cache.get)(message_key) or []
+
+            if pending_messages:
+                # 메시지 배치 처리
+                messages_to_save = []
+                for msg in pending_messages[:100]:  # 한 번에 최대 100개 처리
+                    messages_to_save.append(
+                        Message(
+                            room_id=self.room_id,
+                            sender_id=msg["sender"],
+                            content=msg["content"],
+                        )
+                    )
+
+                await database_sync_to_async(Message.objects.bulk_create)(
+                    messages_to_save
+                )
+
+                # 처리된 메시지 제거
+                await sync_to_async(cache.set)(
+                    message_key,
+                    pending_messages[100:],
+                    timeout=3600,  # 1시간 캐시
+                )
+
+            await asyncio.sleep(0.5)  # 0.5초마다 체크
