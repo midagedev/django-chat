@@ -122,10 +122,11 @@ class ChatRoomViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-            # 최신 메시지 50개 조회
+            # 최신 메시지 50개를 조회한 후 시간순으로 정렬하여 반환
             messages = Message.objects.filter(room=chat_room).order_by("-created_at")[
                 :50
             ]
+            messages = list(reversed(messages))  # 최신순에서 시간순으로 변경
             serializer = MessageSerializer(messages, many=True)
 
             return Response({"results": serializer.data})
